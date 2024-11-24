@@ -1,0 +1,1100 @@
+---
+title: 'R PROJECT: PART 2'
+author: "David Martínez Hernández and Antonio Gómez Garrido"
+date: "2024-10-31"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#INTRODUCTION
+
+In this second phase of the project, we will focus on developing a method to predict audience ratings—specifically IMDb ratings—using the other categories within our dataset. To achieve this, we will employ machine learning techniques designed to analyze and interpret data trends. The process will begin by dividing our dataset into two parts: the training set, which we’ll use to refine and optimize our predictive model, and the testing set, which will allow us to evaluate the model’s efficiency and accuracy in real-world scenarios.
+
+However, as observed in the previous part of this project, our dataset has certain characteristics that limit the applicability of some of the more conventional and advanced machine learning models. As a result, before implementing any predictive algorithms, it is essential to preprocess our data. This preprocessing stage involves converting categorical variables—such as director and genre—into binary (dichotomous) variables and omitting certain other features, such as actors or recommended age, that may not contribute meaningfully to the model or that could introduce noise.
+
+The goal of this preprocessing is to simplify and structure the data in a way that enables our predictive models to perform more accurately and reliably. By doing so, we ensure that the dataset is appropriately structured to leverage the full potential of our chosen machine learning methods, making it possible to identify meaningful patterns that contribute to IMDb rating prediction.
+
+After preprocessing the data in our database, we have chosen to apply the following regression models, carefully selected for their suitability to the specific characteristics of our dataset:
+
+SVM (Support Vector Machine): This model is among the most widely used due to its high precision and robust performance, particularly when working with data that isn’t perfectly linear. Given that our dataset includes complex variables such as directors and genres, SVM is especially suitable for identifying non-linear relationships between these types of variables and IMDb ratings. Its flexibility in handling multidimensional data patterns allows it to capture the intricate correlations that are essential in our predictive modeling.
+
+Logistic Regression: Although this is a simpler model compared to others, it is highly effective in identifying linear relationships between variables. This makes it particularly valuable for understanding the contributions of certain features that have a more straightforward, linear relationship with IMDb ratings. Additionally, the insights from Logistic Regression provide a useful baseline, allowing us to compare its performance against more complex models, offering clarity on the added value of advanced algorithms.
+
+Multilayer Perceptron (MLP): We were also interested in integrating neural networks to explore alternative modeling approaches within our dataset. For this purpose, we selected the Multilayer Perceptron (MLP), a type of neural network model well-suited for detecting highly complex patterns. MLP is capable of capturing interactions between categorical and continuous variables, making it an ideal choice for a diverse and complex dataset like ours. Its ability to manage intricate, layered data interactions offers us a more sophisticated approach to prediction.
+
+Finally, we are interested in taking a new approach to our work by implementing ensemble prediction using the four models mentioned previously. This ensemble method involves combining the four selected models to enhance the overall prediction quality. By leveraging this approach, we aim to achieve more robust predictions with increased generalization, reducing dependency on any single model. This ensemble strategy also helps to minimize the unique error associated with each model—errors that arise due to each model’s individual way of interpreting data—while offering greater flexibility and improved fit.
+
+The primary reason for creating an ensemble is that blending various complementary models allows us to detect and address the specific errors associated with each type of regression model, ultimately yielding a stronger and more resilient prediction. This is why we have chosen such diverse models as SVM, Logistic Regression, and Multilayer Perceptron; together, they can collectively capture a broader spectrum of data interactions and minimize individual model biases.
+
+In conclusion, we will compare the results to determine which model best fits our dataset and understand why this is the case. Additionally, we will examine whether the anticipated improvement in prediction accuracy has been achieved through the model ensemble. Another critical aspect of our analysis will be to assess if we have successfully predicted IMDb ratings based on the supplementary categories in our dataset.
+
+In the end, we will study the specific characteristics that show the strongest correlations with user ratings, aiming to understand why these particular features have a closer relationship with audience evaluations. This analysis will provide insights into the attributes that most significantly influence IMDb ratings and allow us to interpret the reasons behind these connections.
+
+# PREPROCESSING
+
+## ONE HOT ENCODING AND ELIMINATION OF UNUSEFUL VARIABLES
+
+We will begin this second phase of the project with a thorough preprocessing of the database, which will allow us to model predictions using the various machine learning models mentioned earlier. To streamline this process, we will use the caret library, which offers a wide range of tools for data manipulation and correlation visualization, aiding in both preparing and understanding our data.
+
+First, we removed any white spaces from the dataset and converted string variables into factors (stringsAsFactors). Additionally, as in the first phase of this project, we scaled the IMDb rating variable to match the Metascore range; IMDb ratings were originally on a 0–10 scale, whereas Metascore used a 0–100 scale. Standardizing these values ensures that they are compatible in subsequent analyses.
+
+Given the large number of variables in our dataset, we identified and removed several that are not useful for prediction purposes, such as Poster, Cast, Description, Review.Count, Review.Title, Review, Votes, and Certificate. By excluding these from our analysis, we can focus on the variables that more directly impact the prediction models.
+
+We also converted the Metascore variable into a categorical variable for the purpose of our modeling. To do this, we applied the original Metacritic rating categories (as detailed in the first part of the project), which are:
+
+- Overwhelming Dislike: 0-19
+- Generally Unfavorable: 20-39
+- Mixed or Average: 40-59
+- Generally Favorable: 61-80
+- Universal Acclaim: 81-100
+
+
+For consistency, we need to categorize IMDb ratings similarly. However, we previously observed differences in the distribution of IMDb ratings compared to Metascore, particularly that IMDb ratings are more centered around certain values. Therefore, we used quantiles to define these five categories for IMDb, aligning them conceptually with Metascore categories to reflect similar audience sentiment accurately.
+
+We also had to modify the directors and genre variables to make them usable in our regression models. For directors, we created binary (dichotomous) variables for each director who has more than 15 movies in the dataset, while movies by less prominent directors are grouped under an "others" category. This allows the models to factor in directorial influence without overwhelming the dataset with too many categories. We implemented this approach using one-hot encoding: each prominent director is represented by a column, assigned a 1 if they directed a particular movie, and a 0 otherwise.
+
+The treatment of the genre variable follows a similar approach but with an additional step. Many films were categorized by combined genres (e.g., “Action and Adventure”). We separated these into individual categories—Action and Adventure, for instance—and then converted them into binary variables via one-hot encoding. Each genre is now represented as a separate category, allowing the models to analyze each genre’s specific impact.
+
+Next, we split the data into two groups: a testing set, which makes up 30% of the total, and a training set, which represents the remaining 70%, with Rating_Category used as the stratification variable. This division will help ensure that our model is well-trained and validated, providing robust predictions.
+
+```{r}
+# Cargar las librerías necesarias
+library(dplyr)
+library(caret)
+library(corrplot)
+
+# Cargar los datos
+data <- read.csv("C:/Users/Usuario/OneDrive/Documentos/archive/imdb-movies-dataset.csv", 
+                 header = TRUE, quote = "\"", stringsAsFactors = TRUE, strip.white = TRUE)
+
+# Escalar la columna de Rating a una escala de 10 puntos
+data$Rating <- 10 * data$Rating
+
+# Eliminar columnas irrelevantes
+data <- data %>%
+  select(-c(Poster, Cast, Description, Review.Count, Review.Title, Review, Votes, Certificate))
+
+# Crear columna categórica para Metascore
+data$Metascore_Category <- cut(data$Metascore,
+                                breaks = c(0, 19, 39, 60, 80, 100),
+                                labels = c("Overwhelming dislike", "Generally unfavorable", "Mixed or average", 
+                                           "Generally favorable", "Universal acclaim"),
+                                include.lowest = TRUE)
+
+# Crear columna categórica para Rating basado en cuantiles
+imdb_quantiles <- quantile(data$Rating, probs = c(0, 0.2, 0.4, 0.6, 0.8, 1), na.rm = TRUE)
+data$Rating_Category <- cut(data$Rating,
+                             breaks = c(imdb_quantiles),
+                             labels = c("Overwhelming dislike", "Generally unfavorable", "Mixed or average", 
+                                        "Generally favorable", "Universal acclaim"),
+                             include.lowest = TRUE)
+
+# Agrupar directores con menos de 10 películas en "Other" para mantener consistencia
+director_counts <- table(data$Director)
+data$Director <- as.character(data$Director)
+data$Director[director_counts[data$Director] < 15] <- "Other"
+data$Director <- factor(data$Director)
+
+# Aplicar One-Hot Encoding para la columna "Director" en todo el dataset antes de la división
+dummies <- dummyVars(~ Director, data = data)
+data <- cbind(data[, !names(data) %in% "Director"], predict(dummies, newdata = data))
+
+# Dividir la columna de género en géneros individuales y aplicar One-Hot Encoding
+genre_split <- strsplit(as.character(data$Genre), split = ", ")
+unique_genres <- unique(unlist(genre_split))
+
+# Crear una columna binaria para cada género
+for (genre in unique_genres) {
+  data[[genre]] <- sapply(genre_split, function(x) ifelse(genre %in% x, 1, 0))
+}
+
+# Dividir los datos en conjunto de entrenamiento y prueba
+set.seed(123)
+trainIndex <- createDataPartition(data$Rating_Category, p = 0.7, list = FALSE)
+trainData <- data[trainIndex, ]
+testData <- data[-trainIndex, ]
+
+# Verificación final
+cat("Número de variables en trainData:", ncol(trainData), "\n")
+cat("Número de variables en testData:", ncol(testData), "\n")
+```
+
+
+## SCALING, HANDLING OF OULTLIERS AND INTRODUCTION OF MISSING VALUES
+
+We continue our preprocessing work by addressing outliers in the variable Duration..min. Reflecting on the first part of this project, we recall that this variable exhibited a highly skewed distribution, largely due to a number of unusually long films. These long durations lack corresponding data for shorter films, as the shortest films are considered short films and were excluded from this dataset. Additionally, these exceptionally lengthy films tended to receive significantly higher ratings than average, which could distort our overall analysis by overemphasizing these outliers.
+
+To ensure a balanced and representative analysis, we decided to exclude these outliers by setting quantile-based thresholds beyond which data will not be considered. After determining appropriate upper and lower limits to identify outliers, we will filter the train dataset, removing observations in Duration..min that fall outside these defined boundaries.
+
+```{r}
+# Manejo de outliers en la variable Duration..min.
+Q1 <- quantile(trainData$Duration..min., 0.25, na.rm = TRUE)
+Q3 <- quantile(trainData$Duration..min., 0.75, na.rm = TRUE)
+IQR <- Q3 - Q1
+lower_bound <- Q1 - 1.5 * IQR
+upper_bound <- Q3 + 1.5 * IQR
+trainData <- trainData[trainData$Duration..min. >= lower_bound & trainData$Duration..min. <= upper_bound, ]
+
+# Identificar variables continuas y binarias
+numeric_vars <- sapply(trainData, is.numeric)
+binary_vars <- sapply(trainData, function(x) all(x %in% c(0, 1)) & is.numeric(x))
+continuous_vars <- numeric_vars & !binary_vars
+
+# Imputación de valores faltantes: binarios y continuos
+for (col in names(trainData)[binary_vars]) {
+  # Imputación en variables binarias con la moda (valor más frecuente)
+  mode_val <- as.numeric(names(sort(table(trainData[[col]]), decreasing = TRUE)[1]))
+  trainData[[col]][is.na(trainData[[col]])] <- mode_val
+  testData[[col]][is.na(testData[[col]])] <- mode_val
+}
+
+# Calcular la moda para Rating_Category y Metascore_Category en trainData
+rating_category_mode <- as.character(names(sort(table(trainData$Rating_Category), decreasing = TRUE)[1]))
+metascore_category_mode <- as.character(names(sort(table(trainData$Metascore_Category), decreasing = TRUE)[1]))
+
+# Sustituir los valores NA en Rating_Category y Metascore_Category en ambos conjuntos
+trainData$Rating_Category[is.na(trainData$Rating_Category)] <- rating_category_mode
+testData$Rating_Category[is.na(testData$Rating_Category)] <- rating_category_mode
+
+trainData$Metascore_Category[is.na(trainData$Metascore_Category)] <- metascore_category_mode
+testData$Metascore_Category[is.na(testData$Metascore_Category)] <- metascore_category_mode
+
+
+for (col in names(trainData)[continuous_vars]) {
+  # Imputación en variables continuas con la mediana
+  median_val <- median(trainData[[col]], na.rm = TRUE)
+  trainData[[col]][is.na(trainData[[col]])] <- median_val
+  testData[[col]][is.na(testData[[col]])] <- median_val
+}
+
+# Escalado Z-score para variables numéricas continuas seleccionadas, aplicando el modelo en ambos conjuntos
+preProcess_model <- preProcess(trainData[, c("Metascore", "Rating", "Duration..min.", "Year")], 
+                               method = c("center", "scale"))
+trainData[, c("Metascore", "Rating", "Duration..min.", "Year")] <- predict(preProcess_model, 
+                                                                                   trainData[, c("Metascore", "Rating", "Duration..min.", "Year")])
+testData[, c("Metascore", "Rating", "Duration..min.", "Year")] <- predict(preProcess_model, 
+                                                                          testData[, c("Metascore", "Rating", "Duration..min.", "Year")])
+
+```
+
+Next, we identified both continuous and binary variables, designating them accordingly to ensure accurate data handling. We also addressed missing data by implementing an imputation strategy tailored to the type of variable (continuous or binary). For binary variables, we calculated the mode for each and used this mode to replace missing values (NA) in both the training and testing datasets. The same approach was applied to categorical variables, where the mode served as a reliable substitute for absent entries.
+
+For continuous variables, rather than using the mode, we computed the median within the training set and imputed missing values in both the training and testing sets accordingly. This method helps maintain the central tendency of the data without skewing it, providing a more consistent approach for numerical data.
+
+Following imputation, we proceeded to apply Z-score scaling for continuous numerical variables. We created a preprocessing model that centers these variables around the mean and scales them by dividing by their standard deviation. Applying this scaling to both the training and testing sets ensures uniformity in data distribution, an essential factor for effective model training and testing.
+
+Additionally, we developed a script to count missing values, allowing us to confirm that the variables—and, by extension, our updated dataset—are ready for analysis and modeling. This script verifies the remaining number of NA values, ensuring the dataset’s completeness and consistency before moving forward.
+ 
+ 
+ 
+```{r}
+# Contar el número de valores NA en cada variable de trainData
+na_count_train <- sapply(trainData, function(x) sum(is.na(x)))
+cat("Número de NAs en cada variable de trainData:\n")
+print(na_count_train[na_count_train > 0])
+
+# Contar el número de valores NA en cada variable de testData
+na_count_test <- sapply(testData, function(x) sum(is.na(x)))
+cat("Número de NAs en cada variable de testData:\n")
+print(na_count_test[na_count_test > 0])
+
+```
+ 
+```{r}
+trainData <- trainData[!is.na(trainData$Title) & !is.na(trainData$Genre), ]
+
+```
+ 
+ 
+# SVM
+
+The first machine learning model we will apply is the Support Vector Machine, commonly known as SVM. This is a supervised learning model used for both classification and regression tasks. Its primary goal is to identify a decision boundary, or hyperplane, that clearly separates the data into distinct classes. For linearly separable data, the SVM algorithm seeks to find the hyperplane that maximizes the distance between the classes, known as the margin, thereby creating a robust separation that minimizes classification errors.
+
+We chose SVM because it performs exceptionally well on datasets with a large number of features, allowing it to identify complex patterns—like those in our dataset—that might go undetected by other models. Its use of a regularized structure focuses on margin maximization, which provides several advantages:
+
+Pattern Detection: SVM excels in discovering non-obvious patterns within high-dimensional spaces, making it suitable for intricate datasets.
+Regularized Structure: By maximizing the margin, SVM naturally avoids overfitting, particularly in classification problems. This helps ensure that the model generalizes well to new data, maintaining accuracy without being overly sensitive to the training data.
+ 
+ 
+```{r}
+library(e1071)
+
+# Configuración del control de entrenamiento
+train_control <- trainControl(method = "cv", number = 3)
+
+# Seleccionar las variables de entrenamiento excluyendo Title, Genre, Rating, y Metascore_Category
+trainData_rating <- trainData %>% 
+  select(-c(Title, Genre, Rating, Metascore_Category, Director.))
+
+testData_rating <- testData %>%
+  select(-c(Title, Genre, Rating, Metascore_Category, Director.))
+
+# Entrenamiento del modelo SVM con Rating_Category como objetivo
+set.seed(123)
+svm_model <- train(
+  Rating_Category ~ ., 
+  data = trainData_rating,
+  method = "svmLinear",  
+  trControl = train_control
+)
+
+# Imprimir resultados del modelo SVM para Rating_Category
+print(svm_model)
+
+# Predicciones y evaluación del modelo en conjunto de prueba
+pred_svm_rating <- predict(svm_model, newdata = testData_rating)
+conf_matrix_rating <- confusionMatrix(pred_svm_rating, testData_rating$Rating_Category)
+print(conf_matrix_rating)
+
+```
+ 
+
+
+
+
+
+
+
+```{r} 
+library(ggplot2)
+library(caret)
+
+# Crear la matriz de confusión
+conf_matrix <- confusionMatrix(pred_svm_rating, testData_rating$Rating_Category)
+
+# Convertir la matriz de confusión en un data frame
+conf_df <- as.data.frame(conf_matrix$table)
+colnames(conf_df) <- c("Referencia", "Predicción", "Frequency")
+
+# Visualización con ggplot2
+ggplot(data = conf_df, aes(x = Referencia, y = Predicción, fill = Frequency)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  geom_text(aes(label = Frequency), color = "black") +
+  labs(title = "Confusion Matrix - SVM", x = "Real Category", y = "Predicted Category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+```
+
+ 
+```{r}
+library(caret)
+
+# Función para calcular la matriz de confusión y extraer métricas
+calculate_metrics <- function(predictions, actual, model_name) {
+  # Calcular la matriz de confusión
+  conf_matrix <- confusionMatrix(predictions, actual)
+  
+  # Imprimir la matriz de confusión
+  print(paste("Matriz de Confusión para el modelo:", model_name))
+  print(conf_matrix)
+  
+  # Extraer precisión, recall y F1-Score para cada clase
+  precision <- conf_matrix$byClass[, "Pos Pred Value"]
+  recall <- conf_matrix$byClass[, "Sensitivity"]
+  f1_score <- 2 * (precision * recall) / (precision + recall)
+  
+  # Crear un dataframe con las métricas para visualización
+  metrics_df <- data.frame(Class = rownames(conf_matrix$byClass),
+                           Model = model_name,
+                           Precision = precision,
+                           Recall = recall,
+                           F1_Score = f1_score)
+  
+  return(metrics_df)
+}
+
+# Lista para almacenar los resultados de cada modelo
+all_metrics <- list()
+
+# Ejemplo de cálculo para cada modelo
+# Reemplaza 'pred_svm_rating' y 'testData$Rating_Category' con el nombre específico de tus predicciones y variable objetivo
+
+# SVM para Rating_Category
+metrics_svm_rating <- calculate_metrics(pred_svm_rating, testData$Rating_Category, "SVM_Rating")
+all_metrics[[1]] <- metrics_svm_rating
+
+# Si tienes otros modelos, puedes agregarlos aquí
+# Ejemplo: Random Forest
+# metrics_rf <- calculate_metrics(pred_rf, testData$Rating_Category, "Random Forest")
+# all_metrics[[3]] <- metrics_rf
+
+# Combinar todos los resultados en un solo dataframe
+all_metrics_df <- do.call(rbind, all_metrics)
+
+library(pander)
+# Supongamos que `all_metrics` es la tabla de métricas
+# Utilizamos pander para mostrar la tabla con mejor formato
+pander::pander(all_metrics_df)
+
+```
+
+
+Once we have applied the SVM model, we will proceed to examine the prediction results in detail. Our analysis will begin with an in-depth review of the confusion matrix, a key tool for evaluating the model’s classification performance. The confusion matrix allows us to observe how well the model has correctly predicted each class by displaying the counts of true positives, true negatives, false positives, and false negatives.
+
+In our confusion matrix, we observe that the model achieves higher accuracy for predictions in the extreme categories, specifically for Universal Acclaim and, even more so, for Overwhelming Dislike. However, the three central categories display significantly lower precision. This discrepancy suggests that the model may have a bias toward more extreme values, especially toward unfavorable ratings, as indicated by the higher frequency accumulated in the negative area of the matrix. Among the intermediate categories, Generally Unfavorable stands out with a higher occurrence of correct predictions compared to the others.
+
+This pattern suggests that the model is overfitting to the distinct characteristics of lower ratings, which affects its ability to differentiate accurately among the mid-range cases. This challenge is common in multiclass classification problems, especially when the boundaries between classes are not sharply defined, making it difficult for the model to distinguish intermediate values with the same precision it achieves for the extremes.
+
+
+The second approach to evaluating the effectiveness of the SVM model is through the metric table. Our metric table consists of five columns, one for each IMDb rating category, along with three rows corresponding to each of the following metrics:
+
+- Precision: This metric indicates the proportion of correct predictions within each class relative to the total predictions made for that class. As observed in the confusion matrix, precision is higher for the extreme categories, particularly on the negative end. However, in the case of intermediate categories, precision is considerably lower.
+
+- Recall: This measures the proportion of correct predictions for a specific class relative to the total actual instances of that class. Once again, the extremes stand out prominently. A noteworthy difference from other results is that Generally Favorable achieves better recall than Generally Unfavorable.
+
+- F1 Score: The F1 score is the harmonic mean of precision and recall, providing a balanced metric that considers both false positives and false negatives. This parameter is especially useful when there is class imbalance, as it reflects the model’s overall performance rather than focusing solely on precision or recall. Here, we again see high F1 values for the extreme categories. Interestingly, Generally Favorable again achieves a higher score than Generally Unfavorable. However, for the three intermediate categories, the F1 score is quite low, highlighting the model's challenges in predicting these classes with both precision and sensitivity.
+
+
+In conclusion, the SVM model applied to this movie dataset demonstrates acceptable performance in predicting extreme categories, such as "Overwhelming Dislike," but struggles to differentiate between intermediate classes, such as "Generally Favorable" and "Mixed or Average." The confusion matrix, along with metrics like precision and recall, reveal that the model tends to misclassify these middle categories, suggesting that the features used are not sufficient to clearly distinguish classes within this range. This bias toward the extremes may be due to the nature of the predictor variables or the structure of the SVM model itself, which can face challenges in contexts where class boundaries are not clearly defined.
+
+
+# GBM
+
+The second model we used is the Gradient Boosting Machine (GBM). This machine learning model is based on the concept of boosting and operates by creating an ensemble of decision tree models to form a final, strong, and accurate model. One distinctive feature of GBM, which sets it apart from other boosting models, is its sequential training process. Instead of training models independently, each new model is trained sequentially to correct the errors of the previous model, thus achieving greater precision over successive iterations.
+
+We selected GBM because it is known for its high accuracy across a wide range of tasks, as it continuously improves its predictions with each iteration. Additionally, it is highly flexible, allowing it to capture very complex relationships between variables of different types, as is the case with our dataset. However, GBM is prone to overfitting—a risk that can be mitigated with careful selection of hyperparameters—and is computationally intensive. Despite these challenges, it is a model of remarkable sensitivity, capable of detecting extremely subtle patterns.
+
+
+```{r}
+# Convertir los niveles de la variable objetivo a nombres válidos
+trainData_rating$Rating_Category <- factor(make.names(trainData_rating$Rating_Category))
+testData_rating$Rating_Category <- factor(make.names(testData_rating$Rating_Category))
+
+
+# Definir el orden de las clases
+levels_order <- c("Overwhelming.dislike", "Generally.unfavorable", 
+                  "Mixed.or.average", "Generally.favorable", "Universal.acclaim")
+
+# Aplicar el orden al factor en ambos conjuntos
+trainData_rating$Rating_Category <- factor(trainData_rating$Rating_Category, levels = levels_order)
+testData_rating$Rating_Category <- factor(testData_rating$Rating_Category, levels = levels_order)
+
+# Verificar los nuevos niveles
+levels(trainData_rating$Rating_Category)
+
+
+# Cargar la librería caret
+library(caret)
+
+# Configuración del control de entrenamiento con validación cruzada
+train_control <- trainControl(
+  method = "cv",        # Usar validación cruzada
+  number = 5,           # Número de pliegues
+  classProbs = TRUE,    # Habilitar probabilidades de clase
+  summaryFunction = multiClassSummary  # Para obtener métricas multiclase
+)
+
+# Entrenar el modelo GBM
+set.seed(123)  # Para reproducibilidad
+gbm_model <- train(
+  Rating_Category ~ .,            # Variable objetivo
+  data = trainData_rating,        # Conjunto de entrenamiento
+  method = "gbm",                 # Algoritmo GBM
+  trControl = train_control,      # Control de entrenamiento definido anteriormente
+  verbose = FALSE                 # Desactivar verbosidad de salida en GBM
+)
+
+# Imprimir resultados del modelo GBM
+print(gbm_model)
+
+# Predicciones de probabilidad en el conjunto de prueba
+probabilities_gbm <- predict(gbm_model, newdata = testData_rating, type = "prob")
+
+# Predicciones de clase en el conjunto de prueba
+pred_gbm <- predict(gbm_model, newdata = testData_rating)
+
+# Crear la matriz de confusión para evaluar el rendimiento
+conf_matrix_gbm <- confusionMatrix(pred_gbm, testData_rating$Rating_Category)
+print(conf_matrix_gbm)
+
+```
+
+We will now analyze the results achieved with this model, beginning with a close examination of the confusion matrix. As observed—consistent with what we saw with the SVM model—the correct values, which lie on the diagonal, are more frequent in the extreme categories, with a somewhat higher frequency in the Generally Unfavorable category as well. However, there are many errors in predicting the intermediate categories, with these errors occurring more often in the negative classes than the positive ones.
+
+Thus, we can see that our model again displays a prediction bias toward the extremes, with a particularly strong bias toward the negative end. The confusion matrix indicates that, although the GBM model succeeds in capturing patterns in the most distinctive classes, there is still a high rate of error within the intermediate categories. This misclassification could be impacting the model’s overall performance, suggesting that while GBM is effective in handling certain classes, it struggles to accurately differentiate among the intermediate classes.
+
+
+For this model, we were able to create a chart displaying the variables with the greatest weight in the prediction factor. Unsurprisingly, Metascore stands out significantly as the most influential variable. This is expected, given that Metascore shares similar characteristics and purpose with IMDb ratings. Despite some differences, the two variables have a strong correlation, which explains why the model heavily relies on Metascore for its predictions.
+
+Next, we observe that Duration (min) also has a substantial impact, aligning with the observations and results from the first part of the project, where we noted a close relationship between audience ratings and this continuous variable. Following this, we see a number of genres, including Horror, Drama, and Animation, that also carry considerable weight. For Horror, we previously noted that audience opinions tend to be particularly strong and consistent, which could explain its importance in the prediction model, as the model benefits from this concentration of opinions.
+
+Interestingly, Animation and Drama are also influential, despite being genres with a wider range of audience reactions and greater opinion diversity. This makes their prominence in the model somewhat unexpected, as these genres typically do not produce a uniform audience response.
+
+
+
+```{r}
+# Cargar caret y gbm en caso de que no estén cargados
+library(caret)
+library(gbm)
+
+# Extraer la importancia de las variables en el modelo GBM
+var_importance_gbm <- varImp(gbm_model, scale = FALSE)
+
+# Convertir la importancia a un data frame para filtrado
+importance_df <- as.data.frame(var_importance_gbm$importance)
+importance_df$Variable <- rownames(importance_df)
+
+# Seleccionar las 10 variables más importantes
+top_vars <- importance_df[order(-importance_df$Overall), ][1:10, ]
+
+# Graficar solo las 10 variables más importantes
+library(ggplot2)
+ggplot(top_vars, aes(x = reorder(Variable, Overall), y = Overall)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  coord_flip() +
+  labs(title = "Most important variables in GBM", 
+       x = "Variables", y = "Importance") +
+  theme_minimal()
+
+```
+
+
+
+ 
+```{r}
+library(ggplot2)
+library(caret)
+
+# Calcular la matriz de confusión (ejemplo con predicciones de un modelo)
+conf_matrix <- confusionMatrix(pred_gbm, testData_rating$Rating_Category)
+
+# Convertir la matriz de confusión a un data frame para ggplot
+conf_df <- as.data.frame(conf_matrix$table)
+colnames(conf_df) <- c("Referencia", "Predicción", "Frequency")
+
+# Crear el heatmap con ggplot2
+ggplot(data = conf_df, aes(x = Referencia, y = Predicción, fill = Frequency)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  geom_text(aes(label = Frequency), color = "black") +
+  labs(title = "Confusion Matrix - GBM", x = "Real Category", y = "Predicted Category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+```
+ 
+For this model, we have also calculated the ROC curve. Recall that this curve represents sensitivity versus specificity for each rating class in a multiclass context. In this curve, we observe that the classes display relatively low performance, as they do not exhibit high sensitivity values. However, two distinct behavior patterns are noticeable: for the negative extreme, we observe a nearly linear response with an almost constant slope, resembling a straight line. In contrast, for the Universal Acclaim category, there is an almost flat slope along the X-axis until a specificity value near 0.9, at which point the curve sharply changes slope, indicating a significant shift.
+
+Nevertheless, as we have seen through each different method of interpreting results, the intermediate classes fall somewhere within these ranges without any distinct behavioral pattern. In other words, although the GBM model captures certain patterns, there are still challenges in accurately distinguishing closely related classes, such as Mixed or Average and Generally Favorable. This lack of clear separation among the intermediate classes continues to limit the model’s precision in these areas.
+ 
+```{r}
+library(pROC)
+
+# Obtener las probabilidades de clase del modelo GBM
+probabilities_gbm <- predict(gbm_model, newdata = testData_rating, type = "prob")
+
+# Crear la curva ROC multiclase
+roc_gbm <- multiclass.roc(testData_rating$Rating_Category, as.matrix(probabilities_gbm))
+
+# Extraer las curvas ROC y graficarlas
+plot(0, type = "n", xlim = c(0, 1), ylim = c(0, 1), xlab = "1 - Specificity", ylab = "Sensibility",
+     main = "ROC Curve - GBM")
+colors <- rainbow(length(roc_gbm$rocs))
+
+# Graficar cada curva ROC para cada clase en formato "uno contra todos"
+for (i in seq_along(roc_gbm$rocs)) {
+  roc_curve <- roc_gbm$rocs[[i]]
+  
+  # Revisar si `roc_curve` es una lista y extraer los elementos adecuados
+  if (is.list(roc_curve)) {
+    for (j in seq_along(roc_curve)) {
+      plot.roc(roc_curve[[j]], col = colors[i], add = TRUE, lwd = 2)
+    }
+  } else {
+    plot.roc(roc_curve, col = colors[i], add = TRUE, lwd = 2)
+  }
+}
+
+# Añadir una leyenda para identificar cada clase
+legend("bottomleft", legend = levels(testData_rating$Rating_Category), col = colors, lwd = 2)
+
+```
+
+
+ We continue our analysis with the metrics table:
+
+- Precision: We observe an overall improvement in precision for this model compared to the SVM. In particular, precision is once again higher for the extreme categories. However, in this case, Overwhelming Dislike has a significantly lower precision than its opposite extreme. Notably, there is an improvement in the precision of the intermediate classes; although these values remain low, they have increased considerably.
+
+- Recall: For recall, the results echo those observed with the SVM, as we still see very low values, especially in the intermediate classes. However, due to the increased sensitivity of the GBM model, we now observe three distinct levels of recall (whereas we previously saw only two): the highest, corresponding to the extreme categories; a middle level—though still leaning toward lower values—for Generally Favorable and Generally Unfavorable; and a final, lower level for Mixed.
+
+- F1 Score: Finally, the F1 score once again highlights this model's tendency toward bias and its difficulty in differentiating between intermediate classes. The highest F1 values are found in the extreme categories, while very low scores appear in the intermediate classes, with Generally Unfavorable standing out slightly in a positive way. Overall, the model performs acceptably in the extreme classes but still struggles to distinguish the intermediate categories with precision, which is common in multiclass classification problems where boundaries between classes are not sharply defined.
+
+ 
+ 
+```{r}
+library(caret)
+
+# Calcular la matriz de confusión para el modelo GBM en el conjunto de prueba
+conf_matrix_gbm <- confusionMatrix(pred_gbm, testData_rating$Rating_Category)
+
+# Extraer métricas de precisión, recall y F1-score para cada clase
+precision <- conf_matrix_gbm$byClass[, "Pos Pred Value"]
+recall <- conf_matrix_gbm$byClass[, "Sensitivity"]
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+# Crear un dataframe con estas métricas para cada clase
+metrics_df <- data.frame(
+  Class = rownames(conf_matrix_gbm$byClass),
+  Precision = precision,
+  Recall = recall,
+  F1_Score = f1_score
+)
+
+library(pander)
+# Supongamos que `all_metrics` es la tabla de métricas
+# Utilizamos pander para mostrar la tabla con mejor formato
+pander::pander(metrics_df)
+
+```
+ 
+# MULTINOMIAL LOGISTIC REGRESSOR
+
+After performing a study using Support Vector Machines and then a boosting method like GBM, we have decided that it would be a good idea to try and implement a logistic regression model. In this case, since our objective variable is not a binary variable, but a multiclass one, we have implemented a Multinomial Logistic Regressor which is alreadyavailable in the caret enviroment.
+
+These types of model derive from binary logistic regression, but are applied on multiclass variables such as the one of our objective. Generally speaking, this model compares the probabilities of the different classes with respect to a given class of reference. In order to do this, the model implements a regression algorithm that tries to estimate the weight or the importance of each of the independent variables of the dataset in the outcome of the objective variable. Different methods can be used for this purpose, but the most common one is the maximum likelihood method. Then, it assigns to each observation a probability of belonging to each of the different classes of such objective variable, which can be done thanks to the implementation of a softmax function that translates the results of the regression into a set of probabilities for the different classes.
+
+The main appeal behing this multinomial logistic regression model is its interpretability. Because it works internally with probabilities, it is easier to interpret the way in which such model carries out the classification of the observations. This will be exemplified later on.
+
+ 
+```{r}
+library(caret)
+library(ggplot2)
+
+# Asegurar el orden de las clases en Rating_Category
+trainData_rating$Rating_Category <- factor(trainData_rating$Rating_Category, 
+                                           levels = c("Overwhelming.dislike", 
+                                                      "Generally.unfavorable", 
+                                                      "Mixed.or.average", 
+                                                      "Generally.favorable", 
+                                                      "Universal.acclaim"))
+
+testData_rating$Rating_Category <- factor(testData_rating$Rating_Category, 
+                                          levels = c("Overwhelming.dislike", 
+                                                     "Generally.unfavorable", 
+                                                     "Mixed.or.average", 
+                                                     "Generally.favorable", 
+                                                     "Universal.acclaim"))
+
+# Entrenar el modelo de Regresión Logística (usando multinom como antes)
+set.seed(123)
+logistic_model <- train(
+  Rating_Category ~ ., 
+  data = trainData_rating, 
+  method = "multinom",  
+  trControl = train_control
+)
+
+# Predicciones en el conjunto de prueba
+pred_logistic <- predict(logistic_model, newdata = testData_rating)
+
+# Crear la matriz de confusión con el orden correcto
+conf_matrix <- confusionMatrix(pred_logistic, testData_rating$Rating_Category)
+
+# Convertir la matriz de confusión a un data frame para ggplot
+conf_df <- as.data.frame(conf_matrix$table)
+colnames(conf_df) <- c("Referencia", "Predicción", "Frequency")
+
+# Reconvertir las columnas a factores con el orden deseado para asegurar el orden en el heatmap
+conf_df$Referencia <- factor(conf_df$Referencia, levels = c("Overwhelming.dislike", 
+                                                            "Generally.unfavorable", 
+                                                            "Mixed.or.average", 
+                                                            "Generally.favorable", 
+                                                            "Universal.acclaim"))
+conf_df$Predicción <- factor(conf_df$Predicción, levels = c("Overwhelming.dislike", 
+                                                            "Generally.unfavorable", 
+                                                            "Mixed.or.average", 
+                                                            "Generally.favorable", 
+                                                            "Universal.acclaim"))
+
+# Crear el heatmap con ggplot2, asegurando el orden deseado
+ggplot(data = conf_df, aes(x = Referencia, y = Predicción, fill = Frequency)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  geom_text(aes(label = Frequency), color = "black") +
+  labs(title = "Confusion Matrix - Logistic Regression", x = "Real Category", y = "Predicted Category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+```
+
+Now, after implementing the logistic model, we have obtained the results which have been displayed above.The first thing we notice is that, as it has happened with every single one of the models that we have implemented so far, the accuracy and kappa score of our model are definitely poor. Generally speaking, our logistic regression model encounters significant challenges when it comes to distinguishing and classifying between the various classes of our target variable. All general metrics for this model confirm the accuracy of this statement.
+
+However, to check the model's precision for each individual class, we have once again visualized the confusion matrix as a heatmap. As observed with previous models, the classes with the highest number of classifications are the extreme categories, that is, Universal Acclaim and Overwhelming Dislike. There is a large number of correct classifications in these categories, but also a significant amount of errors. Nevertheless, overall, the model is also quite inaccurate in distinguishing among the intermediate categories. These two observations seem to indicate that the only categories which can be clearly distinguished from the others are the extreme ones, while the intermediate ones are more confussive.
+
+Another observation that can be derived from this chart is that this model showcases a clear tendency to produce more false negatives than false positives in the extreme categories, and the opposite pattern in the intermediate ones. Also, the amount of false positives and false negatives is slightly concentrated in the two lowest categories.
+
+
+```{r}
+print(logistic_model)
+```
+
+
+```{r}
+# Extraer precisión, recall y F1-score para cada clase
+precision <- conf_matrix$byClass[, "Pos Pred Value"]
+recall <- conf_matrix$byClass[, "Sensitivity"]
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+# Crear un dataframe con estas métricas para cada clase
+metrics_df <- data.frame(
+  Class = rownames(conf_matrix$byClass),
+  Precision = precision,
+  Recall = recall,
+  F1_Score = f1_score
+)
+
+library(pander)
+# Supongamos que `all_metrics` es la tabla de métricas
+# Utilizamos pander para mostrar la tabla con mejor formato
+pander::pander(metrics_df)
+
+```
+
+All of these features of the model can also be visualized in the table above. Here we see that the class which shows highest precission, recall and F score is Universal Acclaim, while Overwelming dislike also showcases acceptably high values of such metrics. Then the class Generally unfavorable has values of around 0.4 to 0.5, which are quite poor but not as low as those of the two middle classes Mixed or Average and Generally Favorable, which both show values below 0.4 for these metrics.
+
+In order to give further insight into these topics, we have also ploted a ROC curve for the different variables, however, the large amount of classes makes it difficult to interpret the results of such a plot. The only thing that we can clearly see is that, henerally speaking, the different curves for the class Overlwehlming Dislike are closer to the x=y curvethan the ones for higher classes.It is also remarkable that the curves that indicate a better performance are thos of the highest classes Universally Acclaimed and Generally Favorable, which are the ones closer to the top right of the plot and therefore have a higher area under the curve AUC.
+
+
+```{r}
+library(pROC)
+
+# Obtener las probabilidades de clase
+probabilities_logistic <- predict(logistic_model, newdata = testData_rating, type = "prob")
+
+# Crear la curva ROC multiclase
+roc_logistic <- multiclass.roc(testData_rating$Rating_Category, as.matrix(probabilities_logistic))
+
+# Graficar cada curva ROC individualmente
+plot(0, type = "n", xlim = c(0, 1), ylim = c(0, 1), xlab = "1 - Especificity", ylab = "Sensibility",
+     main = "ROC Curve for Logistic Regression")
+colors <- rainbow(length(roc_logistic$rocs))
+
+# Graficar cada curva ROC para cada clase en formato "uno contra todos"
+for (i in seq_along(roc_logistic$rocs)) {
+  roc_curve <- roc_logistic$rocs[[i]]
+  
+  # Verificar si `roc_curve` es una lista y extraer los elementos adecuados
+  if (is.list(roc_curve)) {
+    for (j in seq_along(roc_curve)) {
+      plot.roc(roc_curve[[j]], col = colors[i], add = TRUE, lwd = 2)
+    }
+  } else {
+    plot.roc(roc_curve, col = colors[i], add = TRUE, lwd = 2)
+  }
+}
+
+# Añadir una leyenda para identificar cada clase
+legend("bottomleft", legend = levels(testData_rating$Rating_Category), col = colors, lwd = 2)
+
+```
+
+As stated before, the most attractive feature of this type of model is its interpretability. Since such a model works internally with the computation of probabilities, we can extract such probabilities and study them. In our case, we have calculated the probability of belonging to the different classes with respect to three key predictors, which are Metascore, Duration and Year of release.
+
+
+```{r}
+# Definir un rango para `Metascore`
+metascore_range <- seq(min(trainData_rating$Metascore, na.rm = TRUE), 
+                       max(trainData_rating$Metascore, na.rm = TRUE), length.out = 100)
+
+# Crear un data frame con valores fijos para todas las variables excepto `Metascore`
+example_data <- trainData_rating[1, ]
+example_data <- example_data[rep(1, 100), ]  # Repetir la fila
+example_data$Metascore <- metascore_range  # Asignar el rango
+
+# Predicciones de probabilidades
+pred_probs <- predict(logistic_model, newdata = example_data, type = "prob")
+
+# Graficar la probabilidad de cada clase según el rango de `Metascore`
+library(ggplot2)
+pred_probs_df <- data.frame(Metascore = metascore_range, pred_probs)
+pred_probs_long <- reshape2::melt(pred_probs_df, id.vars = "Metascore", variable.name = "Class", value.name = "Probability")
+
+ggplot(pred_probs_long, aes(x = Metascore, y = Probability, color = Class)) +
+  geom_line() +
+  labs(title = "Probability wrt Metascore", x = "Metascore", y = "Probability") +
+  theme_minimal()
+
+```
+
+In this first plot, we have represented the probabilities with respect to the metascore rating of the movies. As it is logical, in the extremes the highest probabilities are Overwehlming dislike for the case of the lowest values of metascore and Universal Acclaim for the hightest ones. However, the probabilities of beloging to the latter one are considerably higher than any of the other probabilities, which states that this is tha class that our model is more able to distinguish based on the metascore ratings.
+
+Then we also see that the peaks in probability of the middle classes are quite low compared to the other two, specially in the case of the class Mixed or Average. We also see in the lower tail of the graphic that the classes Overwehlming Dislike and Generally Unfavorable have similar probabilities, which shows the dificulty of our model to distinguish between these two categories when the metascore ratings are low.
+
+
+
+```{r}
+# Definir un rango para `Duration..min.`
+duration_range <- seq(min(trainData_rating$Duration..min., na.rm = TRUE), 
+                      max(trainData_rating$Duration..min., na.rm = TRUE), length.out = 100)
+
+# Crear un data frame con valores fijos para todas las variables excepto `Duration..min.`
+example_data_duration <- trainData_rating[1, ]
+example_data_duration <- example_data_duration[rep(1, 100), ]  # Repetir la fila
+example_data_duration$Duration..min. <- duration_range  # Asignar el rango
+
+# Predicciones de probabilidades en función de `Duration..min.`
+pred_probs_duration <- predict(logistic_model, newdata = example_data_duration, type = "prob")
+
+# Graficar la probabilidad de cada clase según el rango de `Duration..min.`
+library(ggplot2)
+pred_probs_duration_df <- data.frame(Duration = duration_range, pred_probs_duration)
+pred_probs_duration_long <- reshape2::melt(pred_probs_duration_df, id.vars = "Duration", variable.name = "Class", value.name = "Probability")
+
+ggplot(pred_probs_duration_long, aes(x = Duration, y = Probability, color = Class)) +
+  geom_line() +
+  labs(title = "Probability wrt Duration", x = "Duration (min)", y = "Probability_Exercises.pdf") +
+  theme_minimal()
+
+```
+
+Then, we have done the same thing for the predictor Duration. Here, we observe, in the first place, that the values of the different probabilities are considerably lower than in the previous case. This indicates that the model views this variable as less important or defining than Metascore Rating. We also observe some interesting features regarding the relation between the duration of a film and its rating.
+
+Generally speaking, the movies which have a lower duration tend to receive a lower classification, since the highest probabilities in the lower tail of the plot belong to the classes Overwehlming Dislike and Generally Unfavorable. Then, as the values of the duration increase, the highest rated categories become more and more probable, specially Universal Acclaim, which is the most probable category for the highest durations.
+
+
+```{r} 
+# Definir un rango para `Year`
+year_range <- seq(min(trainData_rating$Year, na.rm = TRUE), 
+                  max(trainData_rating$Year, na.rm = TRUE), length.out = 100)
+
+# Crear un data frame con valores fijos para todas las variables excepto `Year`
+example_data_year <- trainData_rating[1, ]
+example_data_year <- example_data_year[rep(1, 100), ]  # Repetir la fila
+example_data_year$Year <- year_range  # Asignar el rango
+
+# Predicciones de probabilidades en función de `Year`
+pred_probs_year <- predict(logistic_model, newdata = example_data_year, type = "prob")
+
+# Graficar la probabilidad de cada clase según el rango de `Year`
+pred_probs_year_df <- data.frame(Year = year_range, pred_probs_year)
+pred_probs_year_long <- reshape2::melt(pred_probs_year_df, id.vars = "Year", variable.name = "Class", value.name = "Probability")
+
+ggplot(pred_probs_year_long, aes(x = Year, y = Probability, color = Class)) +
+  geom_line() +
+  labs(title = "Probability wrt Year", x = "Year", y = "Probability") +
+  theme_minimal()
+
+```
+
+
+Finally, in the plot for the probability of each class against year of release, we see that the model does not find a clear correlation between these two variables, as the probabilities of almost every category remain constant independently of the value of the variable Year.
+
+In conclussion, as with the rest of the models, the multinomial logistic regressor fails to correctly differentiate between the more intermediate classes, while having a better accuracy in the extreme ones. Its sensibility with respect to the predictor Metascore is quite outstanding, and it also concedes an acceptable weight to the variable Duration, but can not classificate the different categories based on the year of release of the movies.
+ 
+
+ 
+# MULTILAYER PERCEPTRON
+
+Finally, we have chosen the method Multilayer Perceptron as the last model for our study. Since all of the other models based on regression and boosting have failed to produce satisfactory results, we are going to try and implement a method like this last one based on artificial neural networks. These type of methods are based on different layers of nodes, generally an entry layer, several hidden ones and an output one. The nodes in these layers are conected those of the following ones, and the model assigns different weights to the links between such nodes. In the case of the MLP method, the weights of these links are adjusted through a thecnique of retropropagation, which assesses such weights based on the errors commited by the model itself in the successive predictions.
+
+In this way, the model Multilayer Perceptron has the capacity of ``learning'' more complex or non linear patterns, thus capturing in a better, more accurate way the more complex relations hiden between the variables of our dataset.
+
+
+```{r}
+library(caret)
+library(nnet)  # Cargar nnet para usar MLP
+
+# Asegurar el orden de las clases en Rating_Category
+trainData_rating$Rating_Category <- factor(trainData_rating$Rating_Category, 
+                                           levels = c("Overwhelming.dislike", 
+                                                      "Generally.unfavorable", 
+                                                      "Mixed.or.average", 
+                                                      "Generally.favorable", 
+                                                      "Universal.acclaim"))
+
+testData_rating$Rating_Category <- factor(testData_rating$Rating_Category, 
+                                          levels = c("Overwhelming.dislike", 
+                                                     "Generally.unfavorable", 
+                                                     "Mixed.or.average", 
+                                                     "Generally.favorable", 
+                                                     "Universal.acclaim"))
+
+# Configuración del control de entrenamiento
+train_control <- trainControl(
+  method = "cv",         # Validación cruzada
+  number = 5,            # Número de pliegues
+  classProbs = TRUE,     # Activar probabilidades de clase
+  summaryFunction = multiClassSummary  # Métricas multiclase
+)
+
+# Entrenar el modelo MLP, especificando decay solo en tuneGrid
+set.seed(123)
+mlp_model <- train(
+  Rating_Category ~ ., 
+  data = trainData_rating, 
+  method = "nnet",       # Método para Multilayer Perceptron
+  trControl = train_control,
+  tuneGrid = expand.grid(size = c(1, 3, 5), decay = c(0, 0.0001, 0.1)), # tuning
+  trace = FALSE,         # Desactivar salida de entrenamiento en nnet
+  maxit = 200            # Número máximo de iteraciones
+)
+
+# Imprimir el resumen del modelo
+print(mlp_model)
+
+```
+
+In the previous console output we can see the values of the Accuracy and the Kappa score of this model for different values of its hyperparameters. As we can see, there is a slight improvement in the accuracy of the model, but it is not significative enough, as the highest value that has been achieved is of around 0.43. The same thing happens for the Kappa score, which for the best model reaches a value of 0.28. These values are still way too low to consider this a valid, accurate model.
+
+
+```{r}
+library(ggplot2)
+
+# Predicciones en el conjunto de prueba
+pred_mlp <- predict(mlp_model, newdata = testData_rating)
+
+# Crear la matriz de confusión con el orden correcto
+conf_matrix <- confusionMatrix(pred_mlp, testData_rating$Rating_Category)
+
+# Convertir la matriz de confusión a un data frame para ggplot
+conf_df <- as.data.frame(conf_matrix$table)
+colnames(conf_df) <- c("Referencia", "Predicción", "Frequency")
+
+# Reconvertir las columnas a factores con el orden deseado para asegurar el orden en el heatmap
+conf_df$Referencia <- factor(conf_df$Referencia, levels = c("Overwhelming.dislike", 
+                                                            "Generally.unfavorable", 
+                                                            "Mixed.or.average", 
+                                                            "Generally.favorable", 
+                                                            "Universal.acclaim"))
+conf_df$Predicción <- factor(conf_df$Predicción, levels = c("Overwhelming.dislike", 
+                                                            "Generally.unfavorable", 
+                                                            "Mixed.or.average", 
+                                                            "Generally.favorable", 
+                                                            "Universal.acclaim"))
+
+# Crear el heatmap con ggplot2
+ggplot(data = conf_df, aes(x = Referencia, y = Predicción, fill = Frequency)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  geom_text(aes(label = Frequency), color = "black") +
+  labs(title = "Confusion Matrix - Multilayer Perceptron", x = "Real Category", y = "Predicted Category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+```
+ 
+Looking at the confusion matrix above, we notice a behaviour very similar to that of the other models. In the extreme variables, the model shows a higher accuracy than in the middle ones, where it has more trouble differentiating between one another. However, we see that the performance of this model in classifying the Generally Unfavorable movies is slightly better than for the case of the previous models but, in contrast, we see that the predictions of the Mixed or Average category are almost random, which can be seen in the abnormally big number of false positives in this class.
+ 
+ 
+```{r}
+# Extraer precisión, recall y F1-score para cada clase
+precision <- conf_matrix$byClass[, "Pos Pred Value"]
+recall <- conf_matrix$byClass[, "Sensitivity"]
+f1_score <- 2 * (precision * recall) / (precision + recall)
+
+# Crear un dataframe con estas métricas para cada clase
+metrics_df <- data.frame(
+  Class = rownames(conf_matrix$byClass),
+  Precision = precision,
+  Recall = recall,
+  F1_Score = f1_score
+)
+
+library(pander)
+# Supongamos que `all_metrics` es la tabla de métricas
+# Utilizamos pander para mostrar la tabla con mejor formato
+pander::pander(metrics_df)
+
+```
+ 
+In the table of the metrics of the model, we see once again that the category in which the model showcases a better performance is in the Universal Acclaim one. However, in the other cases, the F1 score is remarkably low with the exception of the class Overwhelming Dislike, which does not have a very high precission but, in contrast, has the highest Recall out of all the categories that are taken into account, which compensates for the low precission, giving an F1 score of around 0.54. The last thing to remark out of this table is that the better performing classes, which are the extreme ones, have a better Recall than Precision, but the opposite thing happens for the middle categories.
+ 
+```{r}
+library(pROC)
+
+# Obtener las probabilidades de clase del modelo MLP
+probabilities_mlp <- predict(mlp_model, newdata = testData_rating, type = "prob")
+
+# Crear la curva ROC multiclase
+roc_mlp <- multiclass.roc(testData_rating$Rating_Category, as.matrix(probabilities_mlp))
+
+# Graficar cada curva ROC individualmente
+plot(0, type = "n", xlim = c(0, 1), ylim = c(0, 1), xlab = "1 - Specificity", ylab = "Sensibility",
+     main = "ROC curve for MLP")
+colors <- rainbow(length(roc_mlp$rocs))
+
+# Graficar cada curva ROC para cada clase en formato "uno contra todos"
+for (i in seq_along(roc_mlp$rocs)) {
+  roc_curve <- roc_mlp$rocs[[i]]
+  
+  # Verificar si `roc_curve` es una lista y extraer los elementos adecuados
+  if (is.list(roc_curve)) {
+    for (j in seq_along(roc_curve)) {
+      plot.roc(roc_curve[[j]], col = colors[i], add = TRUE, lwd = 2)
+    }
+  } else {
+    plot.roc(roc_curve, col = colors[i], add = TRUE, lwd = 2)
+  }
+}
+
+# Añadir una leyenda para identificar cada clase
+legend("bottomleft", legend = levels(testData_rating$Rating_Category), col = colors, lwd = 2)
+
+```
+
+Once again, the plot of the ROC curve does not give much information on the performance of the model. As it happened in the case of the logistic regressor, the curves for Overwhelming Dislike are the closest ones to the x=y curve, and those for Generally Favorable and Universal Acclaim are the closest ones to the top right corner.
+
+# ENSEMBLES
+
+
+In a final approach to our project, we will work with an ensemble of all previously described models. This ensemble involves combining several regression models to help mitigate the typical biases and errors associated with each model’s unique approach to interpreting the data. For this reason, it is beneficial to include as many models as possible in the ensemble and, ideally, models with distinct characteristics.
+
+By leveraging an ensemble, we can achieve an optimized adjustment where models complement and correct each other, resulting in greater precision, robustness, and strength. This method allows for a collective model that minimizes individual weaknesses while enhancing predictive accuracy and resilience against data variability.
+
+
+```{r ensembles manual}
+# Configurar los niveles formateados y el orden deseado de las clases
+original_levels <- c("Overwhelming dislike", "Generally unfavorable", "Mixed or average", 
+                     "Generally favorable", "Universal acclaim")
+
+# Aplicar make.names y asegurar el orden de los niveles en `Rating_Category`
+trainData_rating$Rating_Category <- factor(make.names(trainData_rating$Rating_Category), levels = make.names(original_levels))
+testData_rating$Rating_Category <- factor(make.names(testData_rating$Rating_Category), levels = make.names(original_levels))
+
+# Librerías necesarias
+library(caret)
+library(dplyr)
+library(ggplot2)
+
+# Entrenar el modelo SVM con los nombres formateados
+svm_model <- train(
+  Rating_Category ~ ., 
+  data = trainData_rating, 
+  method = "svmLinear",
+  trControl = trainControl(method = "cv", number = 5, classProbs = TRUE)
+)
+
+# Generar predicciones individuales para cada modelo en el conjunto de prueba
+pred_svm <- predict(svm_model, newdata = testData_rating)
+pred_svm <- factor(pred_svm, levels = levels(testData_rating$Rating_Category))
+
+pred_gbm <- predict(gbm_model, newdata = testData_rating)
+pred_gbm <- factor(pred_gbm, levels = levels(testData_rating$Rating_Category))
+
+pred_mlp <- predict(mlp_model, newdata = testData_rating)
+pred_mlp <- factor(pred_mlp, levels = levels(testData_rating$Rating_Category))
+
+pred_logistic <- predict(logistic_model, newdata = testData_rating)
+pred_logistic <- factor(pred_logistic, levels = levels(testData_rating$Rating_Category))
+
+# Combinar las predicciones en un dataframe
+pred_df <- data.frame(pred_svm, pred_gbm, pred_mlp, pred_logistic)
+
+# Calcular la mayoría de votos fila por fila
+ensemble_predictions <- apply(pred_df, 1, function(row) {
+  names(sort(table(row), decreasing = TRUE))[1]  # Toma el voto mayoritario
+})
+
+# Convertir a factor con los mismos niveles que la variable de destino y el orden original
+ensemble_predictions <- factor(ensemble_predictions, levels = levels(testData_rating$Rating_Category))
+
+# Función para calcular métricas clave y almacenarlas en un dataframe
+calculate_metrics <- function(predictions, actual, model_name) {
+  conf_matrix <- confusionMatrix(predictions, actual)
+  
+  # Extraer métricas: Accuracy, Kappa, Sensitivity, Specificity, F1
+  accuracy <- conf_matrix$overall["Accuracy"]
+  kappa <- conf_matrix$overall["Kappa"]
+  
+  sensitivity <- mean(conf_matrix$byClass[,"Sensitivity"], na.rm = TRUE)
+  specificity <- mean(conf_matrix$byClass[,"Specificity"], na.rm = TRUE)
+  
+  f1 <- mean(2 * ((conf_matrix$byClass[,"Sensitivity"] * conf_matrix$byClass[,"Pos Pred Value"]) /
+                   (conf_matrix$byClass[,"Sensitivity"] + conf_matrix$byClass[,"Pos Pred Value"])), na.rm = TRUE)
+  
+  data.frame(
+    Model = model_name,
+    Accuracy = accuracy,
+    Kappa = kappa,
+    Sensitivity = sensitivity,
+    Specificity = specificity,
+    F1_Score = f1
+  )
+}
+
+# Evaluación del ensemble
+ensemble_metrics <- calculate_metrics(ensemble_predictions, testData_rating$Rating_Category, "Ensemble")
+
+# Evaluación de los modelos individuales
+svm_metrics <- calculate_metrics(pred_svm, testData_rating$Rating_Category, "SVM")
+gbm_metrics <- calculate_metrics(pred_gbm, testData_rating$Rating_Category, "GBM")
+mlp_metrics <- calculate_metrics(pred_mlp, testData_rating$Rating_Category, "MLP")
+logistic_metrics <- calculate_metrics(pred_logistic, testData_rating$Rating_Category, "Logistic Regression")
+
+# Combinar todas las métricas en un solo dataframe
+all_metrics <- bind_rows(ensemble_metrics, svm_metrics, gbm_metrics, mlp_metrics, logistic_metrics)
+
+library(pander)
+# Supongamos que `all_metrics` es la tabla de métricas
+# Utilizamos pander para mostrar la tabla con mejor formato
+pander::pander(all_metrics)
+
+# Crear y mostrar la matriz de confusión para evaluar el rendimiento del ensemble
+conf_matrix <- confusionMatrix(ensemble_predictions, testData_rating$Rating_Category)
+print(conf_matrix)
+
+# Visualización de la matriz de confusión en forma de heatmap
+conf_df <- as.data.frame(conf_matrix$table)
+colnames(conf_df) <- c("Referencia", "Predicción", "Frequency")
+ggplot(data = conf_df, aes(x = Referencia, y = Predicción, fill = Frequency)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  geom_text(aes(label = Frequency), color = "black") +
+  labs(title = "Confusion matrix - Ensemble", x = "Real category", y = "Predicted category") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+
+
+```
+
+We will analyze the data using the same tools as for the individual models. To begin, let’s examine the confusion matrix. We observe an improvement over the individual predictions of each model; however, the same error patterns remain when it comes to distinguishing intermediate classes. Notably, the category with the most accurate predictions is not one of the extremes but rather Generally Unfavorable. Even so, this category is still often confused with others, indicating that the ensemble still faces challenges in distinguishing between certain close classes.
+
+The Overwhelming Dislike class is frequently misclassified as Generally Unfavorable, which points to a tendency in the ensemble to group lower rating categories together. This pattern suggests that while the ensemble reduces some errors, it still struggles with subtle differentiation among closely related classes, particularly on the lower end of the rating spectrum.
+
+Now, let’s examine the metrics table. Being an ensemble, this table is significantly more complex than those of the individual models and includes additional parameters not previously discussed:
+
+Accuracy: The ensemble achieves an accuracy of 0.4416, slightly higher than most individual models, except for GBM, which has a slightly better performance with an accuracy of 0.4453. This indicates that the ensemble does not offer a substantial improvement in accuracy compared to other models.
+
+Kappa: Using the Kappa coefficient, we can assess the level of agreement between the model’s predictions and the actual classes. The ensemble shows a Kappa coefficient of 0.2963, meaning that it achieves a performance level comparable to the best individual models, though without a significant advantage.
+
+F1 Score: The F1 Score for the ensemble is 0.4389, indicating a balance between precision and recall; however, it does not represent a significant improvement over the GBM model.
+
+Sensitivity: Sensitivity measures the model’s ability to correctly identify instances of a specific class. In the ensemble’s metrics table, the sensitivity is approximately 0.4389, which, again, is a moderate value and does not provide a major advantage over the isolated models.
+
+Specificity: Specificity assesses the model’s ability to correctly identify instances that do not belong to a particular class. This metric indicates the model's capability to avoid false positives. The ensemble’s specificity is relatively high, at around 0.8588, suggesting that, similar to the isolated models, the ensemble is quite effective in avoiding false positives and accurately classifying instances that do not belong to specific classes.
+
+This analysis highlights that while the ensemble does offer slightly improved classification, especially in avoiding false positives, its overall performance gains are modest when compared to individual models, particularly in terms of accuracy and sensitivity.
+
+In conclusion, the ensemble of models applied through majority voting demonstrates moderate performance in classifying IMDb ratings, with precision similar to that of the best individual model (GBM) and high specificity, allowing it to largely avoid false positives. However, the ensemble’s sensitivity is moderate, indicating difficulty in correctly identifying instances across all classes, particularly within the intermediate categories, where there remains a high rate of misclassification. This suggests that while the ensemble is useful in smoothing out some individual model errors, it does not contribute significant improvement in identifying complex patterns within the intermediate classes.
+
+The combination of multiple models within the ensemble better captures the extreme classes, yet it does not fully compensate for each model’s limitations in the less distinctive classes. Although the ensemble is stable and effective in avoiding misclassifications for distinctly different classes, its performance in sensitivity limits its overall effectiveness.
+
+# CONCLUSION
+
+In conclusion, in this second part of the project, we have sought to apply various machine learning models and techniques to predict the recommendability of a particular movie based on its average IMDb rating, using other variables in our dataset, such as release year, duration, director, and genre.
+
+To accomplish this, we first conducted a comprehensive preprocessing of our dataset’s variables, which consisted of the following stages:
+
+  - First, we removed the most significant outliers within the Duration variable. This variable exhibited high kurtosis, indicating some unusually high values that could skew our analysis.
+  - Next, we addressed missing values by replacing them with the median of the variable’s distribution for numerical categories and the mode for categorical variables.
+  - We also applied One-Hot Encoding to the Genre and Director variables and removed less relevant variables, such as Cast, Reviews, and Poster.
+  - Finally, we performed Z-score scaling on all numerical variables to normalize the data distribution, facilitating analysis and model handling.
+  
+Following preprocessing, we selected SVM, Gradient Boosting, Multinomial Logistic Regression, and Multilayer Perceptron as our models. Each of these models offered distinct advantages: we aimed to include models capable of detecting complex relationships between variables in our dataset or, in the case of logistic regression, models that were easily interpretable, allowing us to gain insights into the interactions between variables and their impact on IMDb ratings.
+
+In this regard, our study provided some useful findings. By analyzing probabilities within our logistic regression model, we determined that, aside from Metascore—which logically has a significant correlation with IMDb user ratings—the Duration variable can also help gauge a movie’s recommendability, with longer movies generally receiving higher IMDb scores.
+
+However, overall, the results obtained from implementing these machine learning models were largely unsatisfactory. Across all models, we observed low precision and Kappa values, around 0.41 and 0.27, respectively, in most cases. Additionally, the models generally performed better at classifying movies in extreme categories—Universal Acclaim and Overwhelming Dislike—while showing more confusion with intermediate categories, where precision, recall, and F1 scores were consistently lower.
+
+To improve the model’s overall quality and precision, we attempted an ensemble method with all trained models. We selected a voting ensemble approach, in which each of the four models predicted the target variable, and the ensemble’s final prediction was based on the category that received the most votes. This approach generally enhanced model accuracy, though the GBM model ultimately proved to be the most accurate of the four models and the ensemble.
+
+In conclusion, our efforts to develop a model capable of reliably predicting a movie’s recommendability yielded limited success. However, by using GBM and logistic regression, we gained some insight into the influence of various variables in our dataset on IMDb ratings. Moving forward, a promising next step would be to develop binary classifiers based on categories such as “recommendable” and “not recommendable,” as this approach may yield more defined differences than those seen in the intermediate categories of our current classification system.
+
+
